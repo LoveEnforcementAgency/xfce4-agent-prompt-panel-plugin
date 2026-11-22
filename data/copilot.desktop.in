@@ -1,0 +1,8 @@
+[Xfce Panel]
+Type=X-XFCE-PanelPlugin
+Name=Copilot Prompt Panel
+Comment=Open interactive GitHub Copilot in your preferred terminal from a panel text field
+Icon=utilities-terminal
+X-XFCE-Module=copilot
+X-XFCE-Internal=false
+X-XFCE-API=2.0
