@@ -45,11 +45,11 @@ Xfce panel
 The project is currently installed **from source**:
 
 ```sh
-git clone https://github.com/LoveEnforcementAgency/xfce4-copilot-prompt-panel.git xfce4-agent-prompt-panel
+git clone https://github.com/LoveEnforcementAgency/xfce4-agent-prompt-panel.git
 ```
 
-The GitHub repository currently retains its original name; the command above
-checks it out into the new project directory.
+The command above checks out the project into a directory named
+`xfce4-agent-prompt-panel`.
 
 ### 1. Install dependencies
 
