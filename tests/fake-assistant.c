@@ -14,7 +14,10 @@ int main(int argc, char **argv)
         (argc == 3 || (argc == 5 && g_strcmp0(argv[3], "--prompt") == 0) ||
          (argc == 6 && g_strcmp0(argv[3], "--resume") == 0 &&
           g_strcmp0(argv[4], "--session-id") == 0));
-    if (!copilot && !junie)
+    gboolean claude = argc == 1 ||
+        (argc == 2 && g_strcmp0(argv[1], "--resume") != 0) ||
+        (argc == 3 && g_strcmp0(argv[1], "--resume") == 0);
+    if (!copilot && !junie && !claude)
         return 9;
     g_autoptr(JsonBuilder) builder = json_builder_new();
     json_builder_begin_array(builder);

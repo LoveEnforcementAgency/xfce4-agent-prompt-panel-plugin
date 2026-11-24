@@ -11,6 +11,7 @@
 static const gchar *fake_cli;
 static gchar *directory;
 static gchar *junie_cli;
+static gchar *claude_cli;
 static gchar *session_home;
 
 static void send_key(GtkWidget *widget, guint keyval);
@@ -40,9 +41,10 @@ static GtkWidget *find_window(const gchar *name)
     return found;
 }
 
-static void wait_terminal_args(const gchar *const *expected, guint expected_count)
+static void wait_terminal_args_at(const gchar *working_directory,
+                                  const gchar *const *expected, guint expected_count)
 {
-    g_autofree gchar *path = g_build_filename(directory, "interactive-argv.json", NULL);
+    g_autofree gchar *path = g_build_filename(working_directory, "interactive-argv.json", NULL);
     g_autoptr(JsonParser) parser = json_parser_new();
     gboolean received = FALSE;
     gint64 deadline = g_get_monotonic_time() + 8 * G_TIME_SPAN_SECOND;
@@ -60,6 +62,11 @@ static void wait_terminal_args(const gchar *const *expected, guint expected_coun
         g_assert_cmpstr(json_array_get_string_element(args, i), ==, expected[i]);
     g_assert_null(find_window("copilot-chat"));
     g_assert_cmpint(g_remove(path), ==, 0);
+}
+
+static void wait_terminal_args(const gchar *const *expected, guint expected_count)
+{
+    wait_terminal_args_at(directory, expected, expected_count);
 }
 
 static void wait_terminal_command(const gchar *option, const gchar *value)
@@ -96,6 +103,9 @@ static void test_terminal(void)
     g_assert_cmpstr(gtk_label_get_text(GTK_LABEL(placeholder)), ==, "Ask Junie...");
     g_assert_cmpstr(gtk_entry_get_text(GTK_ENTRY(entry)), ==, "Junie prompt");
     send_key_direct(entry, GDK_KEY_Tab);
+    g_assert_cmpstr(gtk_label_get_text(GTK_LABEL(placeholder)), ==, "Ask Claude...");
+    g_assert_cmpstr(gtk_entry_get_text(GTK_ENTRY(entry)), ==, "Junie prompt");
+    send_key_direct(entry, GDK_KEY_Tab);
     g_assert_cmpstr(gtk_label_get_text(GTK_LABEL(placeholder)), ==, "Ask Copilot...");
     g_assert_cmpstr(gtk_entry_get_text(GTK_ENTRY(entry)), ==, "Junie prompt");
     g_list_free(children);
@@ -108,6 +118,7 @@ static void test_terminal(void)
     g_signal_emit_by_name(entry, "activate");
     const gchar *junie_fresh_args[] = { junie_cli, "--project", directory };
     wait_terminal_args(junie_fresh_args, G_N_ELEMENTS(junie_fresh_args));
+    send_key_direct(entry, GDK_KEY_Tab);
     send_key_direct(entry, GDK_KEY_Tab);
     gtk_entry_set_text(GTK_ENTRY(entry), "  ");
     g_signal_emit_by_name(entry, "activate");
@@ -159,6 +170,31 @@ static void test_terminal(void)
     g_assert_true(gtk_widget_get_visible(entry));
 }
 
+static void test_claude_launches(void)
+{
+    g_autofree gchar *terminal = g_find_program_in_path("exo-open");
+    if (terminal == NULL) {
+        g_test_skip("Xfce preferred-application launcher is not installed");
+        return;
+    }
+    g_autoptr(AgentUi) ui = agent_ui_new(NULL, NULL);
+    agent_ui_set_backend(ui, fake_cli, directory);
+    GtkWidget *entry = find_widget(agent_ui_get_widget(ui), "copilot-panel-entry");
+    gtk_entry_set_text(GTK_ENTRY(entry), "Claude prompt");
+    send_key_direct(entry, GDK_KEY_Tab);
+    send_key_direct(entry, GDK_KEY_Tab);
+    GtkWidget *placeholder = find_widget(agent_ui_get_widget(ui), "copilot-placeholder");
+    g_assert_cmpstr(gtk_label_get_text(GTK_LABEL(placeholder)), ==, "Ask Claude...");
+    g_assert_cmpstr(gtk_entry_get_text(GTK_ENTRY(entry)), ==, "Claude prompt");
+    g_signal_emit_by_name(entry, "activate");
+    const gchar *prompted[] = { claude_cli, "Claude prompt" };
+    wait_terminal_args(prompted, G_N_ELEMENTS(prompted));
+    g_assert_cmpstr(gtk_entry_get_text(GTK_ENTRY(entry)), ==, "");
+    g_signal_emit_by_name(entry, "activate");
+    const gchar *fresh[] = { claude_cli };
+    wait_terminal_args(fresh, G_N_ELEMENTS(fresh));
+}
+
 static void test_placeholder_focus(void)
 {
     g_autoptr(AgentUi) ui = agent_ui_new(NULL, NULL);
@@ -181,6 +217,9 @@ static void test_placeholder_focus(void)
     g_assert_false(gtk_widget_get_visible(placeholder));
     send_key_direct(entry, GDK_KEY_Tab);
     g_assert_cmpstr(gtk_label_get_text(GTK_LABEL(placeholder)), ==, "Ask Junie...");
+    send_key_direct(entry, GDK_KEY_Tab);
+    g_assert_cmpstr(gtk_label_get_text(GTK_LABEL(placeholder)), ==, "Ask Claude...");
+    g_assert_cmpstr(gtk_entry_get_text(GTK_ENTRY(entry)), ==, "draft");
     gtk_entry_set_text(GTK_ENTRY(entry), "");
     g_assert_true(gtk_widget_get_visible(placeholder));
     gtk_widget_destroy(window);
@@ -195,13 +234,20 @@ static void test_settings(void)
     GtkWidget *executable = find_window("copilot-executable");
     g_assert_nonnull(executable);
     g_assert_nonnull(find_window("junie-executable"));
+    GtkWidget *claude_executable = find_window("claude-executable");
+    g_assert_nonnull(claude_executable);
     GtkWidget *dialog = gtk_widget_get_toplevel(executable);
     g_assert_null(find_window("copilot-chat"));
     gtk_entry_set_text(GTK_ENTRY(executable), "not-an-executable --allow-all");
     gtk_dialog_response(GTK_DIALOG(dialog), GTK_RESPONSE_OK);
     g_assert_true(gtk_widget_get_visible(dialog));
     g_assert_false(g_file_test(path, G_FILE_TEST_EXISTS));
+    gtk_entry_set_text(GTK_ENTRY(claude_executable), "not-an-executable --allow-all");
+    gtk_dialog_response(GTK_DIALOG(dialog), GTK_RESPONSE_OK);
+    g_assert_true(gtk_widget_get_visible(dialog));
+    g_assert_false(g_file_test(path, G_FILE_TEST_EXISTS));
     gtk_entry_set_text(GTK_ENTRY(executable), fake_cli);
+    gtk_entry_set_text(GTK_ENTRY(claude_executable), fake_cli);
     gtk_spin_button_set_value(GTK_SPIN_BUTTON(find_widget(dialog, "copilot-width")), 310);
     gint64 deadline = g_get_monotonic_time() + G_TIME_SPAN_SECOND;
     while (g_get_monotonic_time() < deadline) {
@@ -211,6 +257,11 @@ static void test_settings(void)
     }
     gtk_dialog_response(GTK_DIALOG(dialog), GTK_RESPONSE_OK);
     g_assert_true(g_file_test(path, G_FILE_TEST_EXISTS));
+    g_autoptr(GKeyFile) saved = g_key_file_new();
+    g_assert_true(g_key_file_load_from_file(saved, path, G_KEY_FILE_NONE, NULL));
+    g_autofree gchar *saved_claude = g_key_file_get_string(
+        saved, "Copilot", "claude-executable", NULL);
+    g_assert_cmpstr(saved_claude, ==, fake_cli);
     g_clear_object(&ui);
     ui = agent_ui_new(NULL, path);
     GtkWidget *entry = find_widget(agent_ui_get_widget(ui), "copilot-panel-entry");
@@ -233,7 +284,8 @@ static void test_settings_without_optional_assistants(void)
     g_autofree gchar *path = g_build_filename(directory, "optional-settings.rc", NULL);
     g_autofree gchar *config = g_strdup_printf(
         "[Copilot]\ndirectory=%s\nexecutable=/nonexistent/copilot\n"
-        "junie-executable=/nonexistent/junie\nwidth=240\n", directory);
+        "junie-executable=/nonexistent/junie\nclaude-executable=/nonexistent/claude\n"
+        "width=240\n", directory);
     g_assert_true(g_file_set_contents(path, config, -1, NULL));
     g_autoptr(AgentUi) ui = agent_ui_new(NULL, path);
     agent_ui_show_settings(ui);
@@ -398,6 +450,23 @@ static void test_recent_sessions(void)
         "\"projectDir\":\"%s\",\"taskName\":\"Junie task\"}\n",
         junie_id, directory);
     g_assert_true(g_file_set_contents(index_path, index, -1, NULL));
+    const gchar *claude_id = "00000000-0000-4000-8000-000000000003";
+    g_autofree gchar *claude_project = g_build_filename(session_home, "claude-project", NULL);
+    g_assert_cmpint(g_mkdir(claude_project, 0700), ==, 0);
+    g_autofree gchar *claude_projects = g_build_filename(session_home, "projects", NULL);
+    g_assert_cmpint(g_mkdir(claude_projects, 0700), ==, 0);
+    g_autofree gchar *claude_project_data = g_build_filename(claude_projects, "-claude-project", NULL);
+    g_assert_cmpint(g_mkdir(claude_project_data, 0700), ==, 0);
+    g_autofree gchar *claude_filename = g_strconcat(claude_id, ".jsonl", NULL);
+    g_autofree gchar *claude_history_path = g_build_filename(
+        claude_project_data, claude_filename, NULL);
+    g_autofree gchar *claude_history = g_strdup_printf(
+        "{\"type\":\"user\",\"sessionId\":\"%s\",\"cwd\":\"%s\","
+        "\"timestamp\":\"2030-01-01T10:00:00Z\",\"message\":{\"content\":\"private prompt\"}}\n"
+        "{\"type\":\"summary\",\"sessionId\":\"%s\",\"cwd\":\"%s\","
+        "\"summary\":\"Claude task\",\"timestamp\":\"2030-01-01T10:05:00Z\"}\n",
+        claude_id, claude_project, claude_id, claude_project);
+    g_assert_true(g_file_set_contents(claude_history_path, claude_history, -1, NULL));
     send_key(entry, GDK_KEY_Up);
     menu = entry_menu(entry);
     wait_sessions(menu, 2);
@@ -432,6 +501,20 @@ static void test_recent_sessions(void)
     g_assert_cmpstr(gtk_entry_get_text(GTK_ENTRY(entry)), ==, "draft stays intact");
 
     send_key_direct(entry, GDK_KEY_ISO_Left_Tab);
+    g_assert_cmpstr(gtk_entry_get_text(GTK_ENTRY(entry)), ==, "draft stays intact");
+    send_key_direct(entry, GDK_KEY_Down);
+    menu = entry_menu(entry);
+    wait_sessions(menu, 1);
+    items = gtk_container_get_children(GTK_CONTAINER(menu));
+    g_assert_true(g_str_has_prefix(gtk_menu_item_get_label(GTK_MENU_ITEM(items->data)),
+                                   "Claude: Claude task"));
+    g_list_free(items);
+    send_key(menu, GDK_KEY_Return);
+    const gchar *claude_resume_args[] = { claude_cli, "--resume", claude_id };
+    wait_terminal_args_at(claude_project, claude_resume_args, G_N_ELEMENTS(claude_resume_args));
+    g_assert_cmpstr(gtk_entry_get_text(GTK_ENTRY(entry)), ==, "draft stays intact");
+
+    send_key_direct(entry, GDK_KEY_Tab);
     send_key_direct(entry, GDK_KEY_Down);
     menu = entry_menu(entry);
     wait_sessions(menu, 2);
@@ -458,6 +541,10 @@ static void test_recent_sessions(void)
     g_assert_cmpint(g_remove(index_path), ==, 0);
     g_assert_cmpint(g_rmdir(junie_session), ==, 0);
     g_assert_cmpint(g_rmdir(junie_root), ==, 0);
+    g_assert_cmpint(g_remove(claude_history_path), ==, 0);
+    g_assert_cmpint(g_rmdir(claude_project_data), ==, 0);
+    g_assert_cmpint(g_rmdir(claude_projects), ==, 0);
+    g_assert_cmpint(g_rmdir(claude_project), ==, 0);
 }
 
 int main(int argc, char **argv)
@@ -467,6 +554,7 @@ int main(int argc, char **argv)
     g_assert_nonnull(session_home);
     g_setenv("COPILOT_HOME", session_home, TRUE);
     g_setenv("JUNIE_HOME", session_home, TRUE);
+    g_setenv("CLAUDE_CONFIG_DIR", session_home, TRUE);
     if (!gtk_init_check(&argc, &argv)) {
         g_assert_cmpint(g_rmdir(session_home), ==, 0);
         g_free(session_home);
@@ -478,17 +566,22 @@ int main(int argc, char **argv)
     g_assert_nonnull(directory);
     junie_cli = g_build_filename(directory, "junie", NULL);
     g_assert_cmpint(symlink(fake_cli, junie_cli), ==, 0);
+    claude_cli = g_build_filename(directory, "claude", NULL);
+    g_assert_cmpint(symlink(fake_cli, claude_cli), ==, 0);
     g_autofree gchar *path = g_strdup_printf("%s:%s", directory,
                                               g_getenv("PATH") != NULL ? g_getenv("PATH") : "");
     g_setenv("PATH", path, TRUE);
     g_test_add_func("/ui/entry-only-terminal-launch-and-recovery", test_terminal);
+    g_test_add_func("/ui/claude-prompt-and-fresh-launch", test_claude_launches);
     g_test_add_func("/ui/placeholder-visible-while-focused", test_placeholder_focus);
     g_test_add_func("/ui/settings-validation-and-persistence", test_settings);
     g_test_add_func("/ui/settings-with-uninstalled-assistants", test_settings_without_optional_assistants);
     g_test_add_func("/ui/recent-session-menu-keyboard-resume-and-cancel", test_recent_sessions);
     int result = g_test_run();
     g_assert_cmpint(g_remove(junie_cli), ==, 0);
+    g_assert_cmpint(g_remove(claude_cli), ==, 0);
     g_free(junie_cli);
+    g_free(claude_cli);
     g_assert_cmpint(g_rmdir(directory), ==, 0);
     g_free(directory);
     g_assert_cmpint(g_rmdir(session_home), ==, 0);

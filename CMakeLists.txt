@@ -18,7 +18,8 @@ add_library(assistant-core STATIC
   src/assistant.c
   src/sessions.c
   src/providers/copilot-sessions.c
-  src/providers/junie-sessions.c)
+  src/providers/junie-sessions.c
+  src/providers/claude-sessions.c)
 set_target_properties(assistant-core PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_include_directories(assistant-core PUBLIC src)
 target_link_libraries(assistant-core PUBLIC PkgConfig::GIO PRIVATE PkgConfig::JSON PkgConfig::YAML)
@@ -51,7 +52,7 @@ if(BUILD_TESTING)
   target_link_libraries(test-panel PRIVATE PkgConfig::GTK PkgConfig::PANEL PkgConfig::GMODULE)
   add_test(NAME panel COMMAND test-panel $<TARGET_FILE:agent-panel>)
   set_tests_properties(panel PROPERTIES TIMEOUT 30 SKIP_RETURN_CODE 77)
-  foreach(provider copilot junie)
+  foreach(provider copilot junie claude)
     add_executable(test-${provider}-sessions tests/test-${provider}-sessions.c)
     target_link_libraries(test-${provider}-sessions PRIVATE assistant-core)
     add_test(NAME ${provider}-sessions COMMAND test-${provider}-sessions)

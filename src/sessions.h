@@ -17,3 +17,4 @@ GPtrArray *assistant_sessions_load(Assistant assistant, const gchar *root,
                                    GCancellable *cancel, GError **error);
 GPtrArray *copilot_sessions_load(const gchar *root, GCancellable *cancel, GError **error);
 GPtrArray *junie_sessions_load(const gchar *root, GCancellable *cancel, GError **error);
+GPtrArray *claude_sessions_load(const gchar *root, GCancellable *cancel, GError **error);

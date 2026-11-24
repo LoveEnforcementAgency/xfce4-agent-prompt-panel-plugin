@@ -15,6 +15,7 @@ struct _AgentUi {
     GtkWidget *directory_chooser;
     GtkWidget *executable_entry;
     GtkWidget *junie_executable_entry;
+    GtkWidget *claude_executable_entry;
     GtkWidget *width_spin;
     GtkWidget *settings_error;
     GtkWidget *sessions_menu;
@@ -23,6 +24,7 @@ struct _AgentUi {
     gchar *directory;
     gchar *executable;
     gchar *junie_executable;
+    gchar *claude_executable;
     Assistant assistant;
     gint width;
     gint panel_size;
@@ -65,7 +67,7 @@ static void update_tooltip(AgentUi *ui)
 
 static void update_placeholder(AgentUi *ui)
 {
-    const gchar *text = ui->assistant == ASSISTANT_COPILOT ? "Ask Copilot..." : "Ask Junie...";
+    g_autofree gchar *text = g_strdup_printf("Ask %s...", assistant_name(ui->assistant));
     gtk_label_set_text(GTK_LABEL(ui->placeholder_label), text);
     if (gtk_entry_get_text_length(GTK_ENTRY(ui->panel_entry)) == 0)
         gtk_widget_show(ui->placeholder_label);
@@ -82,14 +84,16 @@ static void panel_entry_changed(GtkEditable *editable, AgentUi *ui)
 static gboolean launch_terminal(AgentUi *ui, Assistant assistant, const gchar *directory,
                                 const gchar *prompt, const gchar *session_id, GError **error)
 {
-    const gchar *configured_executable = assistant == ASSISTANT_COPILOT ?
-        ui->executable : ui->junie_executable;
+    const gchar *configured_executable = ui->executable;
+    if (assistant == ASSISTANT_JUNIE)
+        configured_executable = ui->junie_executable;
+    else if (assistant == ASSISTANT_CLAUDE)
+        configured_executable = ui->claude_executable;
     g_autofree gchar *executable = g_find_program_in_path(configured_executable);
     if (executable == NULL) {
-        g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_NOT_FOUND,
-                            assistant == ASSISTANT_COPILOT ?
-                            "Copilot executable not found. Check the plugin's Properties." :
-                            "Junie executable not found. Check the plugin's Properties.");
+        g_set_error(error, G_IO_ERROR, G_IO_ERROR_NOT_FOUND,
+                    "%s executable not found. Check the plugin's Properties.",
+                    assistant_name(assistant));
         return FALSE;
     }
     if (!g_path_is_absolute(directory) ||
@@ -132,7 +136,7 @@ static gboolean panel_entry_key(GtkWidget *entry, GdkEventKey *event, AgentUi *u
     if ((event->keyval == GDK_KEY_Tab || event->keyval == GDK_KEY_ISO_Left_Tab) &&
         !(event->state & (GDK_CONTROL_MASK | GDK_MOD1_MASK | GDK_SUPER_MASK))) {
         close_sessions(ui);
-        ui->assistant = ui->assistant == ASSISTANT_COPILOT ? ASSISTANT_JUNIE : ASSISTANT_COPILOT;
+        ui->assistant = ui->assistant == ASSISTANT_CLAUDE ? ASSISTANT_COPILOT : ui->assistant + 1;
         update_placeholder(ui);
         update_tooltip(ui);
         return TRUE;
@@ -341,6 +345,8 @@ static void load_settings(AgentUi *ui)
     g_autofree gchar *executable = g_key_file_get_string(file, "Copilot", "executable", NULL);
     g_autofree gchar *junie_executable =
         g_key_file_get_string(file, "Copilot", "junie-executable", NULL);
+    g_autofree gchar *claude_executable =
+        g_key_file_get_string(file, "Copilot", "claude-executable", NULL);
     if (directory != NULL && g_path_is_absolute(directory)) {
         g_free(ui->directory);
         ui->directory = g_strdup(directory);
@@ -352,6 +358,10 @@ static void load_settings(AgentUi *ui)
     if (junie_executable != NULL && *junie_executable != '\0') {
         g_free(ui->junie_executable);
         ui->junie_executable = g_strdup(junie_executable);
+    }
+    if (claude_executable != NULL && *claude_executable != '\0') {
+        g_free(ui->claude_executable);
+        ui->claude_executable = g_strdup(claude_executable);
     }
     g_autoptr(GError) error = NULL;
     gint width = g_key_file_get_integer(file, "Copilot", "width", &error);
@@ -367,6 +377,7 @@ static gboolean save_settings(AgentUi *ui, GError **error)
     g_key_file_set_string(file, "Copilot", "directory", ui->directory);
     g_key_file_set_string(file, "Copilot", "executable", ui->executable);
     g_key_file_set_string(file, "Copilot", "junie-executable", ui->junie_executable);
+    g_key_file_set_string(file, "Copilot", "claude-executable", ui->claude_executable);
     g_key_file_set_integer(file, "Copilot", "width", ui->width);
     gsize length;
     g_autofree gchar *contents = g_key_file_to_data(file, &length, error);
@@ -413,11 +424,15 @@ static void settings_response(GtkDialog *dialog, gint response, AgentUi *ui)
         g_strdup(gtk_entry_get_text(GTK_ENTRY(ui->executable_entry)));
     g_autofree gchar *junie_executable =
         g_strdup(gtk_entry_get_text(GTK_ENTRY(ui->junie_executable_entry)));
+    g_autofree gchar *claude_executable =
+        g_strdup(gtk_entry_get_text(GTK_ENTRY(ui->claude_executable_entry)));
     g_strstrip(executable);
     g_strstrip(junie_executable);
+    g_strstrip(claude_executable);
     if (directory == NULL || !g_file_test(directory, G_FILE_TEST_IS_DIR) ||
         !executable_setting_valid(executable, ui->executable) ||
-        !executable_setting_valid(junie_executable, ui->junie_executable)) {
+        !executable_setting_valid(junie_executable, ui->junie_executable) ||
+        !executable_setting_valid(claude_executable, ui->claude_executable)) {
         gtk_label_set_text(GTK_LABEL(ui->settings_error),
                            "Select an existing project folder. Changed CLI paths must point to executables, not shell commands.");
         return;
@@ -425,19 +440,23 @@ static void settings_response(GtkDialog *dialog, gint response, AgentUi *ui)
     gchar *old_directory = ui->directory;
     gchar *old_executable = ui->executable;
     gchar *old_junie_executable = ui->junie_executable;
+    gchar *old_claude_executable = ui->claude_executable;
     gint old_width = ui->width;
     ui->directory = g_steal_pointer(&directory);
     ui->executable = g_steal_pointer(&executable);
     ui->junie_executable = g_steal_pointer(&junie_executable);
+    ui->claude_executable = g_steal_pointer(&claude_executable);
     ui->width = gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(ui->width_spin));
     g_autoptr(GError) error = NULL;
     if (!save_settings(ui, &error)) {
         g_free(ui->directory);
         g_free(ui->executable);
         g_free(ui->junie_executable);
+        g_free(ui->claude_executable);
         ui->directory = old_directory;
         ui->executable = old_executable;
         ui->junie_executable = old_junie_executable;
+        ui->claude_executable = old_claude_executable;
         ui->width = old_width;
         gtk_label_set_text(GTK_LABEL(ui->settings_error), error->message);
         return;
@@ -445,6 +464,7 @@ static void settings_response(GtkDialog *dialog, gint response, AgentUi *ui)
     g_free(old_directory);
     g_free(old_executable);
     g_free(old_junie_executable);
+    g_free(old_claude_executable);
     update_tooltip(ui);
     agent_ui_set_layout(ui, ui->orientation, ui->panel_size);
     gtk_widget_destroy(GTK_WIDGET(dialog));
@@ -471,6 +491,7 @@ static void agent_ui_finalize(GObject *object)
     g_free(ui->directory);
     g_free(ui->executable);
     g_free(ui->junie_executable);
+    g_free(ui->claude_executable);
     G_OBJECT_CLASS(agent_ui_parent_class)->finalize(object);
 }
 
@@ -485,6 +506,7 @@ static void agent_ui_init(AgentUi *ui)
     ui->directory = g_strdup(g_get_home_dir());
     ui->executable = g_strdup("copilot");
     ui->junie_executable = g_strdup("junie");
+    ui->claude_executable = g_strdup("claude");
     ui->width = 240;
     ui->panel_size = 32;
     ui->orientation = GTK_ORIENTATION_HORIZONTAL;
@@ -585,6 +607,9 @@ void agent_ui_show_settings(AgentUi *ui)
     ui->junie_executable_entry = gtk_entry_new();
     gtk_widget_set_name(ui->junie_executable_entry, "junie-executable");
     gtk_entry_set_text(GTK_ENTRY(ui->junie_executable_entry), ui->junie_executable);
+    ui->claude_executable_entry = gtk_entry_new();
+    gtk_widget_set_name(ui->claude_executable_entry, "claude-executable");
+    gtk_entry_set_text(GTK_ENTRY(ui->claude_executable_entry), ui->claude_executable);
     ui->width_spin = gtk_spin_button_new_with_range(120, 600, 10);
     gtk_widget_set_name(ui->width_spin, "copilot-width");
     gtk_spin_button_set_value(GTK_SPIN_BUTTON(ui->width_spin), ui->width);
@@ -597,12 +622,14 @@ void agent_ui_show_settings(AgentUi *ui)
     gtk_grid_attach(GTK_GRID(grid), ui->executable_entry, 1, 1, 1, 1);
     gtk_grid_attach(GTK_GRID(grid), gtk_label_new("Junie executable"), 0, 2, 1, 1);
     gtk_grid_attach(GTK_GRID(grid), ui->junie_executable_entry, 1, 2, 1, 1);
-    gtk_grid_attach(GTK_GRID(grid), gtk_label_new("Panel field width (px)"), 0, 3, 1, 1);
-    gtk_grid_attach(GTK_GRID(grid), ui->width_spin, 1, 3, 1, 1);
-    gtk_grid_attach(GTK_GRID(grid), ui->settings_error, 0, 4, 2, 1);
+    gtk_grid_attach(GTK_GRID(grid), gtk_label_new("Claude executable"), 0, 3, 1, 1);
+    gtk_grid_attach(GTK_GRID(grid), ui->claude_executable_entry, 1, 3, 1, 1);
+    gtk_grid_attach(GTK_GRID(grid), gtk_label_new("Panel field width (px)"), 0, 4, 1, 1);
+    gtk_grid_attach(GTK_GRID(grid), ui->width_spin, 1, 4, 1, 1);
+    gtk_grid_attach(GTK_GRID(grid), ui->settings_error, 0, 5, 2, 1);
     GtkWidget *note = gtk_label_new("Authenticate with each CLI before launching.\n"
                                    "Terminal sessions use your normal CLI permissions.");
     gtk_label_set_line_wrap(GTK_LABEL(note), TRUE);
-    gtk_grid_attach(GTK_GRID(grid), note, 0, 5, 2, 1);
+    gtk_grid_attach(GTK_GRID(grid), note, 0, 6, 2, 1);
     gtk_widget_show_all(ui->settings);
 }

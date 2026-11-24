@@ -4,7 +4,8 @@
 
 typedef enum {
     ASSISTANT_COPILOT,
-    ASSISTANT_JUNIE
+    ASSISTANT_JUNIE,
+    ASSISTANT_CLAUDE
 } Assistant;
 
 const gchar *assistant_name(Assistant assistant);

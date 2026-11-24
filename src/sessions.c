@@ -38,6 +38,13 @@ void assistant_sessions_sort(GPtrArray *sessions)
 GPtrArray *assistant_sessions_load(Assistant assistant, const gchar *root,
                                    GCancellable *cancel, GError **error)
 {
-    return assistant == ASSISTANT_JUNIE ? junie_sessions_load(root, cancel, error)
-                                         : copilot_sessions_load(root, cancel, error);
+    switch (assistant) {
+    case ASSISTANT_JUNIE:
+        return junie_sessions_load(root, cancel, error);
+    case ASSISTANT_CLAUDE:
+        return claude_sessions_load(root, cancel, error);
+    case ASSISTANT_COPILOT:
+    default:
+        return copilot_sessions_load(root, cancel, error);
+    }
 }

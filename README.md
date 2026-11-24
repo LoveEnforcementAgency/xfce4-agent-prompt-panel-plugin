@@ -13,7 +13,7 @@
 ---
 
 Type a prompt, press **Enter**, and continue in your preferred terminal.
-Press **Tab** to switch between Copilot and Junie, or **Up**/**Down** to browse
+Press **Tab** to cycle between Copilot, Junie, and Claude, or **Up**/**Down** to browse
 recent sessions for the selected assistant.
 No search button, embedded chat window, or extra prompt history.
 
@@ -23,7 +23,7 @@ Xfce panel
 | Ask Copilot...                        |
 +--------------------------------------+
        |
-       +-- Tab ---------------> Switch between Copilot and Junie
+       +-- Tab ---------------> Copilot → Junie → Claude → Copilot
        +-- Enter with text --> New session with your prompt
        +-- Empty Enter ------> Fresh interactive session
        +-- Up / Down --------> Selected assistant's sessions --> Enter to resume
@@ -33,12 +33,12 @@ Xfce panel
 
 | Feature | What it does |
 | --- | --- |
-| Instant prompting | Launches interactive Copilot or Junie from a single panel text field. |
+| Instant prompting | Launches interactive Copilot, Junie, or Claude Code from a single panel text field. |
 | Recent sessions | Shows up to 20 local sessions for the selected assistant, with titles, project folders, and last-used times. |
 | Preferred terminal | Uses your Xfce terminal preference, including Terminator. |
 | Independent windows | Launches Terminator with `--no-dbus`, even while another session is open. |
 | Project-aware resume | Opens a saved session in its own project directory. |
-| Minimal footprint | Stores only the project folder, both CLI paths, and field width. |
+| Minimal footprint | Stores only the project folder, CLI paths, and field width. |
 
 ## Installation
 
@@ -80,10 +80,10 @@ sudo apt install build-essential cmake ninja-build pkg-config \
 
 Terminator is optional if you already have another preferred terminal.
 Install the CLI for each assistant you want to use:
-[GitHub Copilot CLI](https://github.com/github/copilot-cli), Junie CLI, or both.
-Make its executable available on `PATH` or configure its path in Properties.
-You do not need both CLIs installed. The Copilot integration was tested with
-CLI **1.0.114**.
+[GitHub Copilot CLI](https://github.com/github/copilot-cli), Junie CLI, and
+[Claude Code](https://docs.anthropic.com/en/docs/claude-code/setup). Make each
+executable available on `PATH` or configure its path in Properties; you do not
+need to install all three. The Copilot integration was tested with CLI **1.0.114**.
 
 ### 2. Build and install
 
@@ -136,14 +136,14 @@ To use Terminator, select it in
 | --- | --- | --- |
 | Prompt field, with text | **Enter** | Opens a session with the selected assistant and submits the prompt. |
 | Empty prompt field | **Enter** | Opens a fresh session with the selected assistant. |
-| Prompt field | **Tab / Shift+Tab** | Switches between Copilot and Junie, preserving any draft. |
+| Prompt field | **Tab / Shift+Tab** | Cycles Copilot → Junie → Claude → Copilot, preserving any draft. |
 | Prompt field | **Up / Down** | Opens recent sessions for the selected assistant, preserving any draft. |
 | Session dropdown | **Up / Down** | Moves between sessions. |
 | Session dropdown | **Enter** | Resumes the selected session in a terminal. |
 | Session dropdown | **Escape** | Closes the dropdown and returns focus to the field. |
 
 The session list loads asynchronously and refreshes whenever it opens.
-Copilot mode shows only Copilot sessions; Junie mode shows only Junie sessions.
+Each mode shows only that assistant's sessions: Copilot, Junie, or Claude.
 Switching assistants cancels any pending session load.
 Sessions whose project folders no longer exist are visible but disabled.
 The dropdown opens at its populated size and can flip above a bottom panel.
@@ -160,6 +160,7 @@ Right-click the field and choose **Properties**.
 | Project folder | Working directory for new sessions; defaults to your home folder. |
 | Copilot executable | Program name or executable path, such as `copilot`; not a shell command with arguments. |
 | Junie executable | Program name or executable path, such as `junie`; not a shell command with arguments. |
+| Claude executable | Program name or executable path, such as `claude`; not a shell command with arguments. |
 | Panel field width | Horizontal width in pixels, from 120 to 600. |
 
 On vertical panels, the text field stays available and uses the panel width.
@@ -170,13 +171,14 @@ does not prevent saving other settings; attempting to launch it shows an error.
 
 ## Permissions and session history
 
-Copilot and Junie run with their **normal interactive permissions and authentication**.
+Copilot, Junie, and Claude Code run with their **normal interactive permissions and authentication**.
 The plugin adds no blanket approvals. Saved CLI permissions still apply,
 and prompts are passed as literal arguments rather than evaluated as shell code.
 
-The plugin does not save prompts or read conversation contents. The session
-picker reads Copilot workspace metadata and history-file modification times, and
-Junie session IDs, task names, project folders, and timestamps from these local indexes:
+The plugin does not save prompts or display conversation transcripts. The session
+picker reads provider-local metadata: Copilot workspace metadata and history-file
+modification times, Junie session IDs and task metadata, and Claude session IDs,
+project folders, summary labels, and timestamps from these local stores:
 
 ```text
 $COPILOT_HOME/session-state
@@ -186,6 +188,11 @@ $COPILOT_HOME/session-state
 ```text
 $JUNIE_HOME/sessions/index.jsonl
 # Default when JUNIE_HOME is unset: ~/.junie/sessions/index.jsonl
+```
+
+```text
+$CLAUDE_CONFIG_DIR/projects
+# Default when CLAUDE_CONFIG_DIR is unset: ~/.claude/projects
 ```
 
 > [!NOTE]
@@ -203,10 +210,10 @@ charges and data policies apply.
 | --- | --- |
 | Plugin is missing from Add New Items | Restart the panel; check the Xfce version and user-local discovery support. |
 | A warning icon appears after Enter | Hover over it for the error. The prompt is preserved so you can retry. |
-| Copilot cannot be found | Check `command -v copilot` and the executable in **Properties**. |
+| The selected assistant cannot be found | Check its executable path in **Properties** and confirm the CLI is on `PATH`. |
 | A terminal opens but Copilot needs authentication | Run `copilot login` in a terminal. |
 | The wrong terminal opens | Check Xfce's **Preferred Applications → Terminal Emulator**. |
-| No recent sessions appear | Check `COPILOT_HOME` or `JUNIE_HOME` and local history. Empty Copilot history files and invalid index records are skipped. |
+| No recent sessions appear | Check `COPILOT_HOME`, `JUNIE_HOME`, or `CLAUDE_CONFIG_DIR` and local history. Empty or malformed history records are skipped. |
 | A session cannot be selected | Its saved project folder may no longer exist. |
 
 The field clears when the terminal launcher starts successfully. Errors occurring
@@ -244,7 +251,7 @@ xvfb-run -a ctest --test-dir build --output-on-failure
 ```
 
 For a build without tests, configure with `-DBUILD_TESTING=OFF`.
-JSON-GLib remains required for reading Junie session metadata.
+JSON-GLib remains required for reading Junie and Claude session metadata.
 
 ### Source layout
 
@@ -255,6 +262,7 @@ src/
   providers/
     copilot-sessions.c    Copilot workspace YAML reader
     junie-sessions.c      Junie session-index JSONL reader
+    claude-sessions.c     Claude project-session JSONL reader
   terminal.[ch]            Preferred-terminal launching and argument quoting
   agent-ui.[ch]            GTK field, session dropdown, and Properties
   agent-plugin.c           Xfce panel integration
@@ -264,6 +272,7 @@ tests/
   test-assistant.c         CLI argument contracts
   test-copilot-sessions.c  Copilot metadata tests
   test-junie-sessions.c    Junie metadata tests
+  test-claude-sessions.c  Claude history tests
   test-ui.c                GTK and terminal integration tests
   test-panel.c             Native panel integration tests
 data/
@@ -284,7 +293,7 @@ rm "$HOME/.local/lib/xfce4/panel/plugins/libcopilot.so"
 rm "$HOME/.local/share/xfce4/panel/plugins/copilot.desktop"
 ```
 
-This does not delete either assistant's session history.
+This does not delete any assistant's session history.
 
 ## Licence
 
