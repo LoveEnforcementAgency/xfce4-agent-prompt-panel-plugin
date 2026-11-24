@@ -1,4 +1,4 @@
-#include "copilot-sessions.h"
+#include "sessions.h"
 
 #include <glib/gstdio.h>
 #include <utime.h>
@@ -54,8 +54,8 @@ static void test_metadata(void)
     g_autoptr(GPtrArray) sessions = copilot_sessions_load(root, NULL, &error);
     g_assert_no_error(error);
     g_assert_cmpuint(sessions->len, ==, 2);
-    CopilotSession *first = g_ptr_array_index(sessions, 0);
-    CopilotSession *second = g_ptr_array_index(sessions, 1);
+    AssistantSession *first = g_ptr_array_index(sessions, 0);
+    AssistantSession *second = g_ptr_array_index(sessions, 1);
     g_assert_cmpstr(first->id, ==, newer);
     g_assert_cmpstr(first->name, ==, "First line second line");
     g_assert_cmpstr(second->name, ==, "Fix: 'quoted' issue");
@@ -73,7 +73,7 @@ static void test_limit_and_missing(void)
     }
     g_autoptr(GPtrArray) sessions = copilot_sessions_load(root, NULL, NULL);
     g_assert_cmpuint(sessions->len, ==, 20);
-    CopilotSession *first = g_ptr_array_index(sessions, 0);
+    AssistantSession *first = g_ptr_array_index(sessions, 0);
     g_assert_cmpstr(first->name, ==, "fallback");
     g_assert_cmpstr(first->id, ==, "00000000-0000-4000-8000-000000000021");
     g_autoptr(GCancellable) cancel = g_cancellable_new();

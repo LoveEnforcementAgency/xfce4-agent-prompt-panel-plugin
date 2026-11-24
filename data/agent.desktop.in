@@ -1,7 +1,7 @@
 [Xfce Panel]
 Type=X-XFCE-PanelPlugin
-Name=Copilot Prompt Panel
-Comment=Open interactive GitHub Copilot in your preferred terminal from a panel text field
+Name=Agent Prompt Panel
+Comment=Open interactive Copilot or Junie in your preferred terminal from a panel text field
 Icon=utilities-terminal
 X-XFCE-Module=copilot
 X-XFCE-Internal=false

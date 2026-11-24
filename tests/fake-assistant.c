@@ -5,9 +5,16 @@
 int main(int argc, char **argv)
 {
     g_autofree gchar *cwd = g_get_current_dir();
-    if ((argc != 3 && argc != 5) || g_strcmp0(argv[1], "-C") != 0 ||
-        g_strcmp0(argv[2], cwd) != 0 ||
-        (argc == 5 && g_strcmp0(argv[3], "-i") != 0 && g_strcmp0(argv[3], "--resume") != 0))
+    gboolean copilot = (argc == 3 || argc == 5) && g_strcmp0(argv[1], "-C") == 0 &&
+        g_strcmp0(argv[2], cwd) == 0 &&
+        (argc == 3 || g_strcmp0(argv[3], "-i") == 0 ||
+         g_strcmp0(argv[3], "--resume") == 0);
+    gboolean junie = (argc == 3 || argc == 5 || argc == 6) &&
+        g_strcmp0(argv[1], "--project") == 0 && g_strcmp0(argv[2], cwd) == 0 &&
+        (argc == 3 || (argc == 5 && g_strcmp0(argv[3], "--prompt") == 0) ||
+         (argc == 6 && g_strcmp0(argv[3], "--resume") == 0 &&
+          g_strcmp0(argv[4], "--session-id") == 0));
+    if (!copilot && !junie)
         return 9;
     g_autoptr(JsonBuilder) builder = json_builder_new();
     json_builder_begin_array(builder);
