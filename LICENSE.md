@@ -1,6 +1,6 @@
 # European Union Public Licence v. 1.2
 
-`xfce4-agent-prompt-panel` is licensed under the European Union Public Licence
+`xfce4-agent-prompt-panel-plugin` is licensed under the European Union Public Licence
 version 1.2 (EUPL-1.2).
 
 **SPDX-License-Identifier:** `EUPL-1.2`

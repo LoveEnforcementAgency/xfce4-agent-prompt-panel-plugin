@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(xfce4-agent-prompt-panel VERSION 0.1.0 LANGUAGES C)
+project(xfce4-agent-prompt-panel-plugin VERSION 0.1.0 LANGUAGES C)
 
 include(GNUInstallDirs)
 include(CTest)

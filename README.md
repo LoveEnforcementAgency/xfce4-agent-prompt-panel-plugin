@@ -4,7 +4,7 @@
 
 **Your next agent session starts in the Xfce panel.**
 
-`xfce4-agent-prompt-panel` · Native GTK3 · Keyboard-first · Terminal-powered
+`xfce4-agent-prompt-panel-plugin` · Native GTK3 · Keyboard-first · Terminal-powered
 
 [Install](#installation) · [Shortcuts](#keyboard-shortcuts) · [Settings](#settings) · [Troubleshooting](#troubleshooting) · [Development](#development)
 
@@ -45,11 +45,11 @@ Xfce panel
 The project is currently installed **from source**:
 
 ```sh
-git clone https://github.com/LoveEnforcementAgency/xfce4-agent-prompt-panel.git
+git clone https://github.com/LoveEnforcementAgency/xfce4-agent-prompt-panel-plugin.git
 ```
 
 The command above checks out the project into a directory named
-`xfce4-agent-prompt-panel`.
+`xfce4-agent-prompt-panel-plugin`.
 
 ### 1. Install dependencies
 
@@ -90,7 +90,7 @@ CLI **1.0.114**.
 Run these commands from the downloaded source folder:
 
 ```sh
-cd xfce4-agent-prompt-panel
+cd xfce4-agent-prompt-panel-plugin
 
 cmake -S . -B build -G Ninja \
   -DCMAKE_BUILD_TYPE=Release \
